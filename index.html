@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SMM Web App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:var(--tg-theme-bg-color,#fff);--tx:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#8a8a8e);--btn:var(--tg-theme-button-color,#2481cc);--btx:var(--tg-theme-button-text-color,#fff);--card:var(--tg-theme-secondary-bg-color,#f2f3f5);--ok:#2ea44f;--bad:#e5484d;--warn:#f5a524}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 -apple-system,Roboto,Segoe UI,sans-serif;padding-bottom:74px}
+h2{margin:6px 0 12px;font-size:20px}
+.wrap{padding:14px}
+.card{background:var(--card);border-radius:16px;padding:14px;margin-bottom:12px}
+.hero{background:linear-gradient(135deg,var(--btn),#6b5bff);color:#fff;border-radius:18px;padding:18px;margin-bottom:14px}
+.hero small{opacity:.85}.hero b{display:block;font-size:30px;margin:4px 0 12px}
+.row{display:flex;gap:8px;align-items:center}.sp{justify-content:space-between}
+.btn{border:0;border-radius:12px;background:var(--btn);color:var(--btx);padding:12px 16px;font-size:15px;font-weight:600;width:100%;cursor:pointer}
+.btn.sm{width:auto;padding:8px 14px;font-size:13px}.btn.ghost{background:var(--card);color:var(--tx)}.btn.g2{background:rgba(255,255,255,.22);color:#fff}
+.btn:disabled{opacity:.5}
+input,textarea{width:100%;border:1.5px solid transparent;background:var(--card);color:var(--tx);border-radius:12px;padding:12px;font-size:15px;outline:none;margin-bottom:10px}
+input:focus{border-color:var(--btn)}
+label{display:block;font-size:13px;color:var(--hint);margin:0 0 4px 2px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}.chips::-webkit-scrollbar{display:none}
+.chip{white-space:nowrap;padding:8px 14px;border-radius:20px;background:var(--card);font-size:13px;cursor:pointer}.chip.on{background:var(--btn);color:var(--btx)}
+.svc{cursor:pointer}.svc b{display:block;margin-bottom:4px}.price{color:var(--btn);font-weight:700}.hint{color:var(--hint);font-size:13px}
+.badge{display:inline-block;padding:3px 9px;border-radius:10px;font-size:12px;font-weight:600;background:rgba(128,128,128,.2)}
+.b-Completed{background:rgba(46,164,79,.2);color:var(--ok)}.b-Canceled,.b-Cancelled,.b-Fail,.b-Refunded{background:rgba(229,72,77,.2);color:var(--bad)}
+.b-Pending,.b-Processing,.b-In{background:rgba(245,165,36,.2);color:var(--warn)}
+.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--bg);border-top:1px solid rgba(128,128,128,.25);padding:6px 0 max(6px,env(safe-area-inset-bottom))}
+.tab{flex:1;text-align:center;font-size:11px;color:var(--hint);padding:4px 0;cursor:pointer}.tab i{display:block;font-style:normal;font-size:20px}.tab.on{color:var(--btn)}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;z-index:9}.sheet-bg.on{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-radius:20px 20px 0 0;padding:18px 14px calc(18px + env(safe-area-inset-bottom));z-index:10;max-height:88vh;overflow:auto;transform:translateY(105%);transition:transform .25s}.sheet.on{transform:none}
+.toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:12px;z-index:20;display:none;max-width:90%;text-align:center}
+.center{text-align:center;padding:40px 10px}.loader{color:var(--hint);text-align:center;padding:30px}
+.copy{font-family:monospace;font-size:17px;letter-spacing:1px}
+</style>
+</head>
+<body>
+<div id="app"><div class="loader">Yuklanmoqda...</div></div>
+<div class="tabs" id="tabs" style="display:none">
+  <div class="tab" data-t="home"><i>🏠</i>Bosh</div>
+  <div class="tab" data-t="svc"><i>🛍</i>Xizmatlar</div>
+  <div class="tab" data-t="ord"><i>📦</i>Buyurtma</div>
+  <div class="tab" data-t="bal"><i>💳</i>Hisob</div>
+  <div class="tab" data-t="me"><i>👤</i>Profil</div>
+</div>
+<div class="sheet-bg" id="bg" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+<script>
+const tg = window.Telegram.WebApp; tg.ready(); tg.expand();
+const qs = new URLSearchParams(location.search);
+const API = (qs.get("api") || "").replace(/\/$/, "");
+const S = {tab:"home", cat:0, q:"", page:0, items:[], more:false, data:null, orders:null};
+const $ = s => document.querySelector(s);
+const money = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",2600)}
+function haptic(t){try{tg.HapticFeedback.notificationOccurred(t)}catch(e){}}
+async function call(name, data = {}, isForm = false){
+  if(!API){return {ok:false,error:"API manzili sozlanmagan"}}
+  try{
+    let opt;
+    if(isForm){const f=new FormData();f.append("initData",tg.initData);for(const k in data)f.append(k,data[k]);opt={method:"POST",body:f}}
+    else opt={method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:tg.initData,...data})};
+    const r = await fetch(`${API}/api/${name}`, opt);
+    return await r.json();
+  }catch(e){return {ok:false,error:"Serverga ulanib bo'lmadi"}}
+}
+function openSheet(html){$("#sheet").innerHTML=html;$("#sheet").classList.add("on");$("#bg").classList.add("on")}
+function closeSheet(){$("#sheet").classList.remove("on");$("#bg").classList.remove("on")}
+
+async function boot(){
+  if(!tg.initData){$("#app").innerHTML='<div class="center"><h2>📲 Web App</h2><p class="hint">Bu sahifani Telegram bot orqali oching</p></div>';return}
+  const r = await call("init");
+  if(!r.ok){$("#app").innerHTML=`<div class="center"><h2>⚠️</h2><p>${esc(r.error)}</p><button class="btn" onclick="location.reload()">Qayta urinish</button></div>`;return}
+  S.data = r;
+  r.registered ? (($("#tabs").style.display="flex"), go("home")) : regView();
+}
+
+function regView(){
+  $("#tabs").style.display="none";
+  const u = tg.initDataUnsafe?.user || {};
+  $("#app").innerHTML = `<div class="wrap"><div class="center" style="padding:20px 0"><div style="font-size:54px">🚀</div><h2>Xush kelibsiz</h2><p class="hint">Davom etish uchun ro'yxatdan o'ting</p></div>
+  <label>Ism va familiya</label><input id="rn" placeholder="Ism Familiya" value="${esc(((u.first_name||"")+" "+(u.last_name||"")).trim())}">
+  <label>Telefon raqam</label><input id="rp" type="tel" placeholder="+998 90 123 45 67" value="+998">
+  <label class="row" style="margin:6px 0 14px;color:var(--tx)"><input id="ra" type="checkbox" style="width:auto;margin:0"> Foydalanish shartlariga roziman</label>
+  <button class="btn" id="rb" onclick="doReg()">Ro'yxatdan o'tish</button></div>`;
+}
+async function doReg(){
+  const name=$("#rn").value.trim(), phone=$("#rp").value.trim();
+  if(name.length<2) return toast("Ismingizni kiriting");
+  if(phone.replace(/\D/g,"").length<9) return toast("Telefon raqamni to'g'ri kiriting");
+  if(!$("#ra").checked) return toast("Shartlarga rozilik bering");
+  $("#rb").disabled=true;
+  const r = await call("register",{name,phone});
+  if(!r.ok){$("#rb").disabled=false;haptic("error");return toast(r.error)}
+  haptic("success"); boot();
+}
+
+function go(t){
+  S.tab=t;
+  document.querySelectorAll(".tab").forEach(e=>e.classList.toggle("on",e.dataset.t===t));
+  ({home:homeView,svc:svcView,ord:ordView,bal:balView,me:meView})[t]();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll(".tab").forEach(e=>e.onclick=()=>go(e.dataset.t));
+
+function homeView(){
+  const d=S.data;
+  $("#app").innerHTML = `<div class="wrap"><div class="hero"><small>Salom, ${esc(d.name)} 👋</small><b>${money(d.balance)} so'm</b>
+  <div class="row"><button class="btn g2 sm" onclick="go('bal')">➕ To'ldirish</button><button class="btn g2 sm" onclick="go('svc')">🛍 Xizmatlar</button></div></div>
+  <h2>Bo'limlar</h2>${d.cats.length?d.cats.map(c=>`<div class="card svc" onclick="S.cat=${c.id};go('svc')"><b>${esc(c.name)}</b><span class="hint">Xizmatlarni ko'rish ›</span></div>`).join(""):'<div class="card hint">Hozircha xizmatlar yo\'q</div>'}
+  <div class="card"><b>🎁 Do'st taklif qiling</b><div class="hint">Do'stingiz birinchi marta hisobini to'ldirsa, siz ${money(d.ref.bonus)} so'm bonus olasiz</div></div></div>`;
+}
+
+async function svcView(reset=true){
+  const d=S.data;
+  if(reset){S.page=0;S.items=[]}
+  $("#app").innerHTML = `<div class="wrap"><h2>Xizmatlar</h2><input id="sq" placeholder="🔍 Qidirish..." value="${esc(S.q)}" oninput="searchSvc(this.value)">
+  <div class="chips"><div class="chip ${S.cat==0?"on":""}" onclick="pickCat(0)">Hammasi</div>${d.cats.map(c=>`<div class="chip ${S.cat==c.id?"on":""}" onclick="pickCat(${c.id})">${esc(c.name)}</div>`).join("")}</div>
+  <div id="list"><div class="loader">Yuklanmoqda...</div></div></div>`;
+  await loadSvc();
+}
+let tmr; function searchSvc(v){S.q=v;clearTimeout(tmr);tmr=setTimeout(()=>{S.page=0;S.items=[];loadSvc()},350)}
+function pickCat(id){S.cat=id;svcView()}
+async function loadSvc(){
+  const r = await call("services",{cat:S.cat,q:S.q,page:S.page});
+  if(!r.ok) return $("#list").innerHTML=`<div class="card">${esc(r.error)}</div>`;
+  S.items = S.page===0 ? r.items : S.items.concat(r.items); S.more = r.more;
+  $("#list").innerHTML = (S.items.map(s=>`<div class="card svc" onclick="orderSheet(${s.id})"><b>${esc(s.n)}</b><div class="row sp"><span class="price">${s.p==0?"🆓 Bepul":money(s.p)+" so'm"}<span class="hint"> / 1000</span></span><span class="hint">${money(s.mn)} - ${money(s.mx)}</span></div></div>`).join("") || '<div class="card hint">Hech narsa topilmadi</div>')
+    + (S.more?'<button class="btn ghost" onclick="S.page++;loadSvc()">Yana ko\'rsatish</button>':"");
+}
+
+function orderSheet(id){
+  const s=S.items.find(x=>x.id===id); if(!s) return;
+  openSheet(`<h2>${esc(s.n)}</h2>${s.d?`<p class="hint">${esc(s.d)}</p>`:""}
+  <label>Havola (link)</label><input id="ol" placeholder="https://..." inputmode="url">
+  <label>Miqdor (${money(s.mn)} - ${money(s.mx)})</label><input id="oq" type="number" inputmode="numeric" value="${s.mn}" oninput="calc(${s.p})">
+  <div class="card row sp"><span>Jami narx</span><b id="op" class="price"></b></div>
+  <button class="btn" id="ob" onclick="doOrder(${s.id},${s.p},${s.mn},${s.mx})">🛒 Buyurtma berish</button>`);
+  calc(s.p);
+}
+function calc(p){const q=+$("#oq").value||0;$("#op").textContent=p==0?"Bepul":money(Math.max(1,Math.round(p*q/1000)))+" so'm"}
+async function doOrder(id,p,mn,mx){
+  const link=$("#ol").value.trim(), q=+$("#oq").value;
+  if(!/^(https?:\/\/|@)/.test(link)) return toast("Havolani to'g'ri kiriting");
+  if(!q||q<mn||q>mx) return toast(`Miqdor ${mn} dan ${mx} gacha bo'lsin`);
+  $("#ob").disabled=true;
+  const r = await call("order",{service:id,link,quantity:q});
+  if(!r.ok){$("#ob").disabled=false;haptic("error");return toast(r.error)}
+  S.data.balance=r.balance; haptic("success"); closeSheet(); toast(`✅ Buyurtma #${r.order} qabul qilindi`); S.orders=null;
+}
+
+async function ordView(){
+  $("#app").innerHTML='<div class="wrap"><h2>Buyurtmalar</h2><div id="ol" class="loader">Yuklanmoqda...</div></div>';
+  const r = await call("orders"); if(!r.ok) return $("#ol").innerHTML=esc(r.error);
+  S.data.balance=r.balance;
+  $("#ol").className="";
+  $("#ol").innerHTML = r.items.map(o=>`<div class="card"><div class="row sp"><b>#${o.id} ${esc(o.n)}</b><span class="badge b-${esc(o.s.split(" ")[0])}">${esc(o.s)}</span></div>
+  <div class="hint" style="word-break:break-all">${esc(o.l)}</div><div class="row sp" style="margin-top:6px"><span>${money(o.q)} ta · <b>${money(o.p)} so'm</b></span>
+  ${o.api&&["Pending","In progress","Processing"].includes(o.s)?`<button class="btn sm ghost" onclick="refreshOrd(${o.id})">🔄</button>`:`<span class="hint">${esc(o.d.slice(0,10))}</span>`}</div></div>`).join("") || '<div class="card hint center">Hali buyurtma yo\'q</div>';
+}
+async function refreshOrd(id){const r=await call("orders",{refresh:id});if(r.ok){toast("Yangilandi");ordView()}}
+
+function balView(){
+  const d=S.data;
+  $("#app").innerHTML = `<div class="wrap"><div class="hero"><small>Balansingiz</small><b>${money(d.balance)} so'm</b></div>
+  <h2>Hisobni to'ldirish</h2>
+  <div class="card"><div class="hint">Karta raqami</div><div class="copy" id="cd">${esc(d.card)}</div><button class="btn sm ghost" style="margin-top:8px" onclick="navigator.clipboard.writeText(document.getElementById('cd').textContent.split(' (')[0].replace(/\\s/g,''));toast('Nusxalandi')">📋 Nusxalash</button></div>
+  <label>Summa (minimal ${money(d.mintop)} so'm)</label><input id="ta" type="number" inputmode="numeric" placeholder="${d.mintop}">
+  <div class="chips">${[10000,20000,50000,100000].map(a=>`<div class="chip" onclick="document.getElementById('ta').value=${a}">${money(a)}</div>`).join("")}</div>
+  <label>To'lov cheki (skrinshot)</label><input id="tf" type="file" accept="image/*">
+  <button class="btn" id="tb" onclick="doTopup()">📤 Chekni yuborish</button>
+  <p class="hint">Admin tekshirgach balansingiz to'ldiriladi</p></div>`;
+}
+function shrink(file){return new Promise((res,rej)=>{const i=new Image,u=URL.createObjectURL(file);i.onload=()=>{const k=Math.min(1,1400/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*k;c.height=i.height*k;c.getContext("2d").drawImage(i,0,0,c.width,c.height);c.toBlob(b=>b?res(b):rej(),"image/jpeg",.82)};i.onerror=rej;i.src=u})}
+async function doTopup(){
+  const a=+$("#ta").value, f=$("#tf").files[0];
+  if(!a||a<S.data.mintop) return toast(`Minimal summa ${money(S.data.mintop)} so'm`);
+  if(!f) return toast("Chek rasmini tanlang");
+  $("#tb").disabled=true;
+  let blob; try{blob=await shrink(f)}catch(e){blob=f}
+  const r = await call("topup",{amount:a,photo:new File([blob],"chek.jpg",{type:"image/jpeg"})},true);
+  $("#tb").disabled=false;
+  if(!r.ok){haptic("error");return toast(r.error)}
+  haptic("success"); toast("✅ Chek yuborildi, admin tasdiqlaydi"); balView();
+}
+
+function meView(){
+  const d=S.data;
+  $("#app").innerHTML = `<div class="wrap"><div class="card center" style="padding:22px"><div style="font-size:46px">👤</div><h2 style="margin:4px 0">${esc(d.name)}</h2><div class="hint">${esc(d.phone)}</div><div class="hint">ID: ${d.id}</div></div>
+  <div class="card"><b>🎁 Promokod</b><div class="row" style="margin-top:8px"><input id="pc" placeholder="KOD" style="margin:0;text-transform:uppercase"><button class="btn sm" onclick="doPromo()">Qo'llash</button></div></div>
+  <div class="card"><b>👥 Referal</b><div class="hint" style="margin:4px 0 8px">Taklif qilinganlar: ${d.ref.n} · To'lov qilganlar: ${d.ref.paid}</div>
+  <button class="btn ghost" onclick="tg.openTelegramLink('https://t.me/share/url?url='+encodeURIComponent('${d.ref.link}'))">📤 Do'stlarga yuborish</button></div>
+  ${d.support?`<button class="btn ghost" onclick="tg.openTelegramLink('https://t.me/${esc(d.support.replace('@',''))}')">👨‍💻 Yordam</button>`:""}</div>`;
+}
+async function doPromo(){
+  const c=$("#pc").value.trim(); if(!c) return toast("Promokodni kiriting");
+  const r=await call("promo",{code:c}); if(!r.ok){haptic("error");return toast(r.error)}
+  S.data.balance=r.balance; haptic("success"); toast(`🎉 +${money(r.added)} so'm qo'shildi`); $("#pc").value="";
+}
+boot();
+</script>
+</body>
+</html>
